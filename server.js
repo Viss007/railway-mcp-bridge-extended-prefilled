@@ -11,11 +11,55 @@ const PORT = process.env.PORT || 3000;const ALLOW_WRITES = String(process.env.AL
 function makeDockerAgent() {  const host = process.env.DOCKER_HOST || "";  const useTLS = String(process.env.DOCKER_TLS || "false").toLowerCase() === "true";  if (!host) return null;  if (!useTLS) {    return new Agent({connect: { timeout: 15000 } });  }  const b64 = (v) => (v ? Buffer.from(v, "base64").toString("utf8") : undefined);  const ca = b64(process.env.DOCKER_TLS_CA_B64);  const cert = b64(process.env.DOCKER_TLS_CERT_B64);  const key = b64(process.env.DOCKER_TLS_KEY_B64);  return new Agent({connect: { timeout: 15000, tls: { ca, cert, key, rejectUnauthorized: true } },  });}const dockerAgent = makeDockerAgent();const dockerHost = process.env.DOCKER_HOST || "";
 
 // ---- SSE hub ----
-let clients = new Set();function sseSend(res, event, payload) {  res.write(`event: ${event}\n`);  res.write(`data: ${JSON.stringify(payload)}\n\n\n`);
+let clients = new Set();function sseSend(res, event, payload) {
+  res.write("event: " + event + "
+");
+  res.write("data: " + JSON.stringify(payload) + "
+
+");
+}
+\n`);  res.write(`data: ${JSON.stringify(payload)}\n\n\n`);
 }
 
 // ---- Manifest for MCP ----
-function manifest() {  return {    type: "manifest",    name: "Railway MCPBridge",    version: "0.2.1",    tools: [      {        name: "ping",        description: "Health check; returns pong.",        input_schema: { type: "object", properties: {}, additionalProperties: false }      },       { name: "discord.sendMessage", description: "Send a message to a Discord channel (guarded by ALLOW_WRITES).", input_schema: { type: "object", required: ["content"], properties: { channel_id: { type: "string", description: "Target channel ID" }, content: { type: "string", description: "Message content" } }, additionalProperties: false } },      { name: "github.getUser", description: "Get the authenticated GitHub user.", input_schema: { type: "object", properties: {}, additionalProperties: false } },      { name: "railway.listProjects", description: "List Railway projects (GraphQL).", input_schema: { type: "object", properties: {}, additionalProperties: false } ] }}
+function manifest() {
+  return {
+    type: "manifest",
+    name: "Railway MCPBridge",
+    version: "0.2.1",
+    tools: [
+      {
+        name: "ping",
+        description: "Health check; returns pong.",
+        input_schema: { type: "object", properties: {}, additionalProperties: false }
+      },
+      {
+        name: "discord.sendMessage",
+        description: "Send a message to a Discord channel (guarded by ALLOW_WRITES).",
+        input_schema: {
+          type: "object",
+          required: ["content"],
+          properties: {
+            channel_id: { type: "string", description: "Target channel ID" },
+            content: { type: "string", description: "Message content" }
+          },
+          additionalProperties: false
+        }
+      },
+      {
+        name: "github.getUser",
+        description: "Get the authenticated GitHub user.",
+        input_schema: { type: "object", properties: {}, additionalProperties: false }
+      },
+      {
+        name: "railway.listProjects",
+        description: "List Railway projects (GraphQL).",
+        input_schema: { type: "object", properties: {}, additionalProperties: false }
+      }
+    ]
+  };
+}
+, additionalProperties: false }      },       { name: "discord.sendMessage", description: "Send a message to a Discord channel (guarded by ALLOW_WRITES).", input_schema: { type: "object", required: ["content"], properties: { channel_id: { type: "string", description: "Target channel ID" }, content: { type: "string", description: "Message content" } }, additionalProperties: false } },      { name: "github.getUser", description: "Get the authenticated GitHub user.", input_schema: { type: "object", properties: {}, additionalProperties: false } },      { name: "railway.listProjects", description: "List Railway projects (GraphQL).", input_schema: { type: "object", properties: {}, additionalProperties: false } ] }}
 
 // ---- Routes ----app.get("/", (_, res) => res.send("ok"));app.get("/healthz", (_, res) => res.json({ ok: true }));
 
