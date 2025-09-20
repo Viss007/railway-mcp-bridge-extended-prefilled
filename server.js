@@ -25,10 +25,9 @@ function makeDockerAgent() {
 let clients = new Set();
 function sseSend(res, payload) {
   res.write(`event: message\n`)
-  res.write(data: ${JSON.stringify(payload)}\n\n))
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
-function manifest() {
-  return {
+function manifest() {  return {
     type: "manifest",
     name: "Railway MCP Bridge",
     version: "0.2.0",
@@ -43,10 +42,5 @@ function manifest() {
         description: "Send a message to a Discord channel (guarded by ALLOW_WRITES env flag).",
         input_schema: { type: "object", required: ["channel_id","content"], properties: { channel_id: { type: "string", description: "Target channel ID" }, content: { type: "string", description: "Message content" } }, additionalProperties: false }
       },
-      {
-        name: "github.getUser",
-        description: "Get the authenticated GitHub user profile.",
-        input_schema: { type: "object", properties: {}, additionalProperties: false }
-      },
-      { name: "railway.listProjects", description: "List your Railway projects (GraphQL).", input_schema: { type: "object", properties: {}, additionalProperties: false } ] }
+      { name: "github.getUser", description: "Get the authenticated GitHub user profile.", input_schema: { type: "object", properties: {}, additionalProperties: false } },      { name: "railway.listProjects", description: "List your Railway projects (GraphQL).",  input_schema: { type: "object", properties: {}, additionalProperties: false } ] }
 }
