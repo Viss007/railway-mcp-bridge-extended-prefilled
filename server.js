@@ -54,16 +54,36 @@ function manifest() {
       }
     ]
   };
+;
 }
-, additionalProperties: false }      },       { name: "discord.sendMessage", description: "Send a message to a Discord channel (guarded by ALLOW_WRITES).", input_schema: { type: "object", required: ["content"], properties: { channel_id: { type: "string", description: "Target channel ID" }, content: { type: "string", description: "Message content" } }, additionalProperties: false } },      { name: "github.getUser", description: "Get the authenticated GitHub user.", input_schema: { type: "object", properties: {}, additionalProperties: false } },      { name: "railway.listProjects", description: "List Railway projects (GraphQL).", input_schema: { type: "object", properties: {}, additionalProperties: false } ] }}
 
-// ---- Routes ----app.get("/", (_, res) => res.send("ok"));app.get("/healthz", (_, res) => res.json({ ok: true }));
+// ---- Routes ----
+app.get("/", (_, res) => res.send("ok"));
+app.get("/healthz", (_, res) => res.json({ ok: true }));
 
-app.get("/sse", (req, res) => {  res.setHeader("Content-Type", "text/event-stream");  res.setHeader("Cache-Control", "no-cache");  res.setHeader("Connection", "keep-alive");  res.setHeader("X-Accel-Buffering", "no");  res.flushHeaders?.();  sseSend(res, "manifest", manifest());  clients.add(res);  const keep = setInterval(() => res.write:": keep-alive\n\n", 15000);  req.on("close", () => {    clearInterval(keep);    clients.delete(res);  });});
+app.get("/sse", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-// ---- Ajv + handlers ----const ajv = new Ajv({removeAdditional: "all", strict: false });
+  sseSend(res, "manifest", manifest());
 
-async function h_ping() {  return { pong: true, ts: new Date().toISOString() };}
+  const keep = setInterval(() => {
+    res.write(": keep-alive\n\n");
+  }, 15000);
+
+  req.on("close", () => {
+    clearInterval(keep);
+  });
+});
+
+// ---- Ajv + handlers ----
+const ajv = new Ajv({ removeAdditional: "all", strict: false });f
+  function h_ping() {
+
+  return { pong: true, ts: new Date().toISOString() };
+}
+
 
 async function h_discord_sendMessage(args) {  if (!ALLOW_WRITES) return { ok: false, error: "Writes are disabled (set ALLOW_WRITES=true)" };  const token = process.env.DISCORD_BOT_TOKEN;  const resolvedChannel = args.channel_id || process.env.DISCORD_DEFAULT_CHANNEL_ID;  if (!token) return { ok: false, error: "Missing DISCORD_BOT_TOKEN" };  if (!resolvedChannel) return { ok: false, error: "Missing channel_id and DISCORD_DEFAULT_CHANNEL_ID" };  const r = await fetch( `https://discord.com/api/v10/channels/${encodeURIComponent(resolvedChannel)}/messages`,    {      method: "POST",      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },      body: JSON.stringify({ content: args.content }),    }  );  const data = await r.json().catch(() => ({}));  if (!r.ok) return { ok: false, status: r.status, data };  return {    ok: true,    id: data.id,    link: https://discord.com/channels/${data.guild_id || "@me"}/${resolvedChannel}/${data.id} } }
 
