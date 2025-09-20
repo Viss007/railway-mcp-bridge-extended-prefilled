@@ -10,16 +10,12 @@ const PORT = process.env.PORT || 3000;const ALLOW_WRITES = String(process.env.AL
 // ---- Docker Engine TLS Agent ----
 function makeDockerAgent() {  const host = process.env.DOCKER_HOST || "";  const useTLS = String(process.env.DOCKER_TLS || "false").toLowerCase() === "true";  if (!host) return null;  if (!useTLS) {    return new Agent({connect: { timeout: 15000 } });  }  const b64 = (v) => (v ? Buffer.from(v, "base64").toString("utf8") : undefined);  const ca = b64(process.env.DOCKER_TLS_CA_B64);  const cert = b64(process.env.DOCKER_TLS_CERT_B64);  const key = b64(process.env.DOCKER_TLS_KEY_B64);  return new Agent({connect: { timeout: 15000, tls: { ca, cert, key, rejectUnauthorized: true } },  });}const dockerAgent = makeDockerAgent();const dockerHost = process.env.DOCKER_HOST || "";
 
-// ---- SSE hub ----
-let clients = new Set();function sseSend(res, event, payload) {
-  res.write("event: " + event + "
-");
-  res.write("data: " + JSON.stringify(payload) + "
+// ---- SSE hub ----let clients = new Set();
+function sseSend(res, event, payload) {
+  res.write("event: " + event + "\n");
+  res.write("data: " + JSON.stringify(payload) + "\n\n");
+}
 
-");
-}
-\n`);  res.write(`data: ${JSON.stringify(payload)}\n\n\n`);
-}
 
 // ---- Manifest for MCP ----
 function manifest() {
