@@ -57,7 +57,8 @@ function manifest() {
           properties: {
             channel_id: {
               type: "string",
-              description: "Target channel ID (optional; falls back to DISCORD_DEFAULT_CHANNEL_ID)",
+              description:
+                "Target channel ID (optional; falls back to DISCORD_DEFAULT_CHANNEL_ID)",
             },
             content: { type: "string", description: "Message content" },
           },
@@ -96,7 +97,8 @@ function manifest() {
       },
       {
         name: "railway.triggerDeploy",
-        description: "Trigger a deployment via Railway Deploy Hook URL (guarded by ALLOW_WRITES).",
+        description:
+          "Trigger a deployment via Railway Deploy Hook URL (guarded by ALLOW_WRITES).",
         input_schema: {
           type: "object",
           properties: {
