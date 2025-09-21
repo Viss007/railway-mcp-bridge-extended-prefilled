@@ -78,7 +78,7 @@ app.get("/sse", (req, res) => {
 });
 
 // ---- Ajv + handlers ----
-const ajv = new Ajv({ removeAdditional: "all", strict: false });f
+const ajv = new Ajv({ removeAdditional: "all", strict: false });
   function h_ping() {
 
   return { pong: true, ts: new Date().toISOString() };
