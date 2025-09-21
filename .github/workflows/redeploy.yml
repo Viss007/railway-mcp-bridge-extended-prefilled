@@ -1,0 +1,25 @@
+name: Redeploy (Railway, manual)
+on:
+  workflow_dispatch:
+    inputs:
+      serviceId: { required: true, type: string }
+      environmentId: { required: true, type: string }
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Railway GraphQL redeploy
+        env:
+          RW_TOKEN: ${{ secrets.RW_TOKEN }}
+          SERVICE_ID: ${{ inputs.serviceId }}
+          ENV_ID: ${{ inputs.environmentId }}
+        run: |
+          read -r -d '' GQL <<'EOF'
+          mutation Redeploy($serviceId: String!, $environmentId: String!) {
+            serviceInstanceRedeploy(serviceId: $serviceId, environmentId: $environmentId) { id status }
+          }
+          EOF
+          curl -sS https://backboard.railway.app/graphql/v2 
+            -H "Authorization: Bearer ${RW_TOKEN}" -H 'Content-Type: application/json' 
+            -d "$(jq -n --arg q "$GQL" --arg sid "$SERVICE_ID" --arg eid "$ENV_ID" '{query:$q, variables:{serviceId:$sid, environmentId:$eid}}')"
