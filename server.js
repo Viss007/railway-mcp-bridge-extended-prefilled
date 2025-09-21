@@ -3,7 +3,16 @@ import dotenv from "dotenv";
 import Ajv from "ajv";
 import { Agent } from "undici";
 
-dotenv.config();const app = express();app.use(express.json({ limit: "1mb" }));
+dotenv.config();const app = express();
+// CORS (MCP connector)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;const ALLOW_WRITES = String(process.env.ALLOW_WRITES || "false").toLowerCase() === "true";
 
@@ -78,6 +87,25 @@ app.get("/sse", (req, res) => {
 });
 
 // ---- Ajv + handlers ----
+
+// MCP JSON-RPC over HTTP
+app.post('/mcp', async (req, res) => {
+  const body = req.body || {};
+  const { id, method, params } = body;
+  const ok = (result) => res.json({ jsonrpc: '2.0', id, result });
+  const err = (message, code = -32000) => res.json({ jsonrpc: '2.0', id, error: { code, message } });
+  try {
+    if (method === 'initialize') { return ok({ session_id: Date.now().toString(36), server: 'railway-mcp-bridge', version: '0.2.1' }); }
+    if (method === 'tools/list') { return ok({ tools: manifest().tools }); }
+    if (method === 'tools/call') {
+      const name = params?.name; const args = params?.args || {};
+      const handlers = { 'ping': h_ping, 'discord.sendMessage': h_discord_sendMessage, 'github.getUser': h_github_getUser, 'railway.listProjects': h_railway_listProjects };
+      if (!handlers[name]) return err('unknown tool: ' + name);
+      const result = await handlers[name](args); return ok(result);
+    }
+    return err('unknown method: ' + method);
+  } catch (e) { return err(e?.message || 'internal error'); }
+});
 const ajv = new Ajv({ removeAdditional: "all", strict: false });
   function h_ping() {
 
