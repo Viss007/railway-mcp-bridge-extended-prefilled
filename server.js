@@ -1,123 +1,72 @@
 import express from "express";
-import dotenv from "dotenv";
-import Ajv from "ajv";
-import { Agent } from "undici";
+import cors from "cors";
+import crypto from "crypto";
 
-dotenv.config();const app = express();
-// CORS (MCP connector)
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
-app.use(express.json({ limit: "1mb" }));
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
 
-const PORT = process.env.PORT || 3000;const ALLOW_WRITES = String(process.env.ALLOW_WRITES || "false").toLowerCase() === "true";
+const PORT = process.env.PORT || 8080;
+const version = process.env.npm_package_version || "dev";
 
-// ---- Docker Engine TLS Agent ----
-function makeDockerAgent() {  const host = process.env.DOCKER_HOST || "";  const useTLS = String(process.env.DOCKER_TLS || "false").toLowerCase() === "true";  if (!host) return null;  if (!useTLS) {    return new Agent({connect: { timeout: 15000 } });  }  const b64 = (v) => (v ? Buffer.from(v, "base64").toString("utf8") : undefined);  const ca = b64(process.env.DOCKER_TLS_CA_B64);  const cert = b64(process.env.DOCKER_TLS_CERT_B64);  const key = b64(process.env.DOCKER_TLS_KEY_B64);  return new Agent({connect: { timeout: 15000, tls: { ca, cert, key, rejectUnauthorized: true } },  });}const dockerAgent = makeDockerAgent();const dockerHost = process.env.DOCKER_HOST || "";
+/* ---- Health ---- */
+app.get("/healthz", (_, res) => res.status(200).json({ ok: true, version }));
+app.get("/health",  (_, res) => res.redirect(307, "/healthz"));
 
-// ---- SSE hub ----let clients = new Set();
-function sseSend(res, event, payload) {
-  res.write("event: " + event + "\n");
-  res.write("data: " + JSON.stringify(payload) + "\n\n");
-}
-
-
-// ---- Manifest for MCP ----
-function manifest() {
-  return {
-    type: "manifest",
-    name: "Railway MCPBridge",
-    version: "0.2.1",
-    tools: [
-      {
-        name: "ping",
-        description: "Health check; returns pong.",
-        input_schema: { type: "object", properties: {}, additionalProperties: false }
-      },
-      {
-        name: "discord.sendMessage",
-        description: "Send a message to a Discord channel (guarded by ALLOW_WRITES).",
-        input_schema: {
-          type: "object",
-          required: ["content"],
-          properties: {
-            channel_id: { type: "string", description: "Target channel ID" },
-            content: { type: "string", description: "Message content" }
-          },
-          additionalProperties: false
-        }
-      },
-      {
-        name: "github.getUser",
-        description: "Get the authenticated GitHub user.",
-        input_schema: { type: "object", properties: {}, additionalProperties: false }
-      },
-      {
-        name: "railway.listProjects",
-        description: "List Railway projects (GraphQL).",
-        input_schema: { type: "object", properties: {}, additionalProperties: false }
-      }
-    ]
-  };
-;
-}
-
-// ---- Routes ----
-app.get("/", (_, res) => res.send("ok"));
-app.get("/healthz", (_, res) => res.json({ ok: true }));
-
-app.get("/sse", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
-  sseSend(res, "manifest", manifest());
-
-  const keep = setInterval(() => {
-    res.write(": keep-alive\n\n");
-  }, 15000);
-
-  req.on("close", () => {
-    clearInterval(keep);
+/* ---- SSE contract ChatGPT expects ---- */
+function sseHeaders(res) {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS",
   });
-});
-
-// ---- Ajv + handlers ----
-
-// MCP JSON-RPC over HTTP
-app.post('/mcp', async (req, res) => {
-  const body = req.body || {};
-  const { id, method, params } = body;
-  const ok = (result) => res.json({ jsonrpc: '2.0', id, result });
-  const err = (message, code = -32000) => res.json({ jsonrpc: '2.0', id, error: { code, message } });
-  try {
-    if (method === 'initialize') { return ok({ session_id: Date.now().toString(36), server: 'railway-mcp-bridge', version: '0.2.1' }); }
-    if (method === 'tools/list') { return ok({ tools: manifest().tools }); }
-    if (method === 'tools/call') {
-      const name = params?.name; const args = params?.args || {};
-      const handlers = { 'ping': h_ping, 'discord.sendMessage': h_discord_sendMessage, 'github.getUser': h_github_getUser, 'railway.listProjects': h_railway_listProjects };
-      if (!handlers[name]) return err('unknown tool: ' + name);
-      const result = await handlers[name](args); return ok(result);
-    }
-    return err('unknown method: ' + method);
-  } catch (e) { return err(e?.message || 'internal error'); }
-});
-const ajv = new Ajv({ removeAdditional: "all", strict: false });
-  function h_ping() {
-
-  return { pong: true, ts: new Date().toISOString() };
 }
+app.head("/sse", (req, res) => { sseHeaders(res); res.status(200).end(); });
+app.options("/sse", (req, res) => { res.set("Allow","GET,OPTIONS"); res.status(204).end(); });
+app.post("/sse", (req, res) => { res.set("Allow","GET,OPTIONS"); res.status(405).send("Method Not Allowed"); });
+app.get("/sse", (req, res) => {
+  sseHeaders(res);
+  res.flushHeaders?.();
+  res.write(": ok\n\n");
+  const iv = setInterval(() => res.write("event: ping\ndata: {}\n\n"), parseInt(process.env.SSE_KEEPALIVE_MS||"30000",10));
+  req.on("close", () => clearInterval(iv));
+});
 
+/* ---- Minimal MCP JSON-RPC that passes Doctor ---- */
+const ok = (id, result) => ({ jsonrpc: "2.0", id, result });
+const err = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
 
-async function h_discord_sendMessage(args) {  if (!ALLOW_WRITES) return { ok: false, error: "Writes are disabled (set ALLOW_WRITES=true)" };  const token = process.env.DISCORD_BOT_TOKEN;  const resolvedChannel = args.channel_id || process.env.DISCORD_DEFAULT_CHANNEL_ID;  if (!token) return { ok: false, error: "Missing DISCORD_BOT_TOKEN" };  if (!resolvedChannel) return { ok: false, error: "Missing channel_id and DISCORD_DEFAULT_CHANNEL_ID" };  const r = await fetch( `https://discord.com/api/v10/channels/${encodeURIComponent(resolvedChannel)}/messages`,    {      method: "POST",      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },      body: JSON.stringify({ content: args.content }),    }  );  const data = await r.json().catch(() => ({}));  if (!r.ok) return { ok: false, status: r.status, data };  return {    ok: true,    id: data.id,    link: `https://discord.com/channels/${data.guild_id || "@me"}/${resolvedChannel}/${data.id}` } }
+app.post("/mcp/", (req, res) => {
+  const { id, method, params } = req.body || {};
+  const t0 = Date.now();
+  try {
+    if (method === "initialize") {
+      const session_id = crypto.randomBytes(5).toString("base64url").toUpperCase();
+      return res.json(ok(id, { session_id }));
+    }
+    if (method === "tools/list") {
+      const tools = [{ name: "ping", description: "Return pong", input_schema: { type: "object", properties: {} } }];
+      return res.json(ok(id, { tools }));
+    }
+    if (method === "tools/call") {
+      if (params?.name === "ping") return res.json(ok(id, "pong"));
+      return res.json(err(id, -32601, `Unknown tool: ${params?.name}`));
+    }
+    return res.json(err(id, -32601, "Method not found"));
+  } finally {
+    try {
+      console.log("[audit]", JSON.stringify({
+        ts: new Date().toISOString(),
+        action: method,
+        duration_ms: Date.now() - t0,
+      }));
+    } catch {}
+  }
+});
 
-async function h_github_getUser() {  const token = process.env.GITHUB_TOKEN;  if (!token) return { ok: false, error: "Missing GITHUB_TOKEN" };  const r = await fetch("https://api.github.com/user", {    headers: {     "User-Agent": "railway-mcp-bridge",     Authorization: `Bearer ${token}`,     Accept: "application/vnd.github+json",   },  });  const data = await r.json().catch(() => ({}));  if (!r.ok) return { ok: false, status: r.status, data };  return { ok: true, login: data.login, id: data.id, html_url: data.html_url, name: data.name };}
+app.all("/mcp", (_, res) => res.status(405).json({ error:"Use POST /mcp/" }));
 
-async function h_railway_listProjects() {  const token = process.env.RAILWAY_TOKEN;  if (!token) return { ok: false, error: "Missing RAILWAY_TOKEN" };  const query = `query { me { projects { edges { node { id name } } } } }`;  const r = await fetch("https://backboard.railway.app/graphql/v2", {    method: "POST",    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },   body: JSON.stringify({ query }),  });  const data = await r.json().catch(() => ({}));  if (!r.ok || data.errors) return { ok: false, status: r.status, data };  const edges = data?.data?.me?.projects?.edges || [];  return { ok: true, count: edges.length, projects: edges.map((e) => e.node) };}
+app.listen(PORT, () => console.log(`listening on ${PORT}`));
 
-// ---- Start server (Railway) ----
-app.listen(PORT, "0.0.0.0", () => console.log("listening on", PORT));
