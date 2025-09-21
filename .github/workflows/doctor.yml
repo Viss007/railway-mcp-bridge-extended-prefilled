@@ -1,0 +1,24 @@
+name: Doctor (health + SSE)
+on:
+  push: { branches: [ main ] }
+  pull_request:
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HOST: railway-mcp-bridge-extended-prefilled-production.up.railway.app
+    steps:
+      - name: G0 health
+        run: |
+          code=$(curl -fsS -o /tmp/body -w "%{http_code}" "https://${HOST}/healthz" || true)
+          test "$code" = "200" && grep -q '"ok":true' /tmp/body || { echo "Bad status:$code"; cat /tmp/body; exit 1; }
+      - name: G1 SSE first event
+        run: |
+          curl -sS -i -N "https://${HOST}/sse" | head -n 20 | tee /tmp/sse.txt
+          grep -qi '^content-type: *text/event-stream' /tmp/sse.txt
+          grep -q '^event: manifest$' /tmp/sse.txt
+          grep -q '^data: {' /tmp/sse.txt
+          ln=$(grep -n '^data: {' /tmp/sse.txt | head -1 | cut -d: -f1 || true)
+          [ -n "$ln" ] && sed -n "$((ln+1))p" /tmp/sse.txt | grep -q '^$' || { echo "Missing blank line after data"; exit 1; }
