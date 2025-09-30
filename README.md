@@ -22,6 +22,21 @@ npm i
 powershell -c 'ifnot(PORT) echo PORT; $mIS;node server.js`
 `
 
+## Security
+
+Optional token-based authentication protects `/mcp` and `/sse` endpoints:
+
+```bash
+# Set ADMIN_TOKEN to enable auth
+export ADMIN_TOKEN=your-secret-token
+npm start
+
+# Clients must include the token in requests
+curl -H "x-admin-token: your-secret-token" http://localhost:8080/mcp/
+```
+
+Leave `ADMIN_TOKEN` empty to disable authentication.
+
 ## Tools
 # examples
 curl -N http://localhost:3000/sse

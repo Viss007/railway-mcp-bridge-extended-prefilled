@@ -8,6 +8,18 @@ app.use(express.json({ limit: "2mb" }));
 
 const PORT = process.env.PORT || 8080;
 const version = process.env.npm_package_version || "dev";
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
+
+/* ---- Auth middleware ---- */
+app.use((req, res, next) => {
+  if (ADMIN_TOKEN && (req.url.startsWith("/mcp") || req.url.startsWith("/sse"))) {
+    const token = req.headers["x-admin-token"];
+    if (token !== ADMIN_TOKEN) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+  }
+  next();
+});
 
 /* ---- Health ---- */
 app.get("/healthz", (_, res) => res.status(200).json({ ok: true, version }));
